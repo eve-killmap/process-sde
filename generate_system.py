@@ -5,7 +5,7 @@ from typing import Any
 
 import sde
 from config import config
-from schema import Planet, SolarSystem, Vec2
+from schema import Planet, SolarSystem, Vec2, Vec3
 from utils import (
     Number,
     get_distance,
@@ -77,13 +77,16 @@ class SystemBuilder:
     accumulates every station/stargate type encountered so type radii can be
     generated afterwards.
 
-    The ``set_*`` methods populate the given destination dict and return the
-    distance of the farthest object they added, so callers can track the
-    system's overall extent.
+    The ``set_*`` methods populate the given destination dict.
     """
 
     def __init__(self) -> None:
+        self.farthest_object: float = 0.0
         self.collidable_types: set[int] = set()
+
+    def set_farthest(self, position: Vec3) -> None:
+        distance = get_distance(position)
+        self.farthest_object = max(self.farthest_object, distance)
 
     def set_star_data(self, dst: dict[str, Any], src: SolarSystem) -> None:
         if "starID" not in src:
@@ -96,12 +99,11 @@ class SystemBuilder:
             "warpPosition": get_sun_warp_in(star["radius"]),
         }
 
-    def set_asteroid_belt_data(self, dst: dict[str, Any], src: Planet) -> Number:
+    def set_asteroid_belt_data(self, dst: dict[str, Any], src: Planet) -> None:
         if "asteroidBeltIDs" not in src:
-            return 0
+            return
 
         belts = []
-        farthest = 0
 
         for belt_id in src["asteroidBeltIDs"]:
             belt = sde.belts_by_id[belt_id]
@@ -118,18 +120,16 @@ class SystemBuilder:
                 belt_obj["radius"] = round_num(belt["radius"])
 
             belts.append(belt_obj)
-            farthest = max(farthest, get_distance(belt["position"]))
+
+            self.set_farthest(belt["position"])
 
         dst["asteroidBelts"] = belts
 
-        return farthest
-
-    def set_station_data(self, dst: dict[str, Any], src: Mapping[str, Any]) -> Number:
+    def set_station_data(self, dst: dict[str, Any], src: Mapping[str, Any]) -> None:
         if "npcStationIDs" not in src:
-            return 0
+            return
 
         stations = []
-        farthest = 0
 
         for station_id in src["npcStationIDs"]:
             station = sde.stations_by_id[station_id]
@@ -152,19 +152,17 @@ class SystemBuilder:
                 }
             )
 
-            farthest = max(farthest, get_distance(station["position"]))
+            self.set_farthest(station["position"])
+
             self.collidable_types.add(station["typeID"])
 
         dst["stations"] = stations
 
-        return farthest
-
-    def set_moon_data(self, dst: dict[str, Any], src: Planet) -> Number:
+    def set_moon_data(self, dst: dict[str, Any], src: Planet) -> None:
         if "moonIDs" not in src:
-            return 0
+            return
 
         moons = []
-        farthest = 0
 
         for moon_id in src["moonIDs"]:
             moon = sde.moons_by_id[moon_id]
@@ -187,22 +185,20 @@ class SystemBuilder:
 
             set_nested_if_present(moon_obj, moon, "uniqueName", "en")
 
-            # A moon's stations do not extend the system's farthest object.
             self.set_station_data(moon_obj, moon)
 
             moons.append(moon_obj)
-            farthest = max(farthest, get_distance(moon["position"]))
+
+            self.set_farthest(moon["position"])
 
         dst["moons"] = moons
 
-        return farthest
 
-    def set_planet_data(self, dst: dict[str, Any], src: SolarSystem) -> Number:
+    def set_planet_data(self, dst: dict[str, Any], src: SolarSystem) -> None:
         if "planetIDs" not in src:
-            return 0
+            return
 
         planets = []
-        farthest = 0
 
         for planet_id in src["planetIDs"]:
             planet = sde.planets_by_id[planet_id]
@@ -219,30 +215,21 @@ class SystemBuilder:
 
             set_nested_if_present(planet_obj, planet, "uniqueName", "en")
 
-            belt_farthest = self.set_asteroid_belt_data(planet_obj, planet)
-            moon_farthest = self.set_moon_data(planet_obj, planet)
-            station_farthest = self.set_station_data(planet_obj, planet)
-
-            farthest = max(
-                farthest,
-                get_distance(planet["position"]),
-                belt_farthest,
-                moon_farthest,
-                station_farthest,
-            )
+            self.set_asteroid_belt_data(planet_obj, planet)
+            self.set_moon_data(planet_obj, planet)
+            self.set_station_data(planet_obj, planet)
 
             planets.append(planet_obj)
 
+            self.set_farthest(planet["position"])
+
         dst["planets"] = planets
 
-        return farthest
-
-    def set_stargate_data(self, dst: dict[str, Any], src: SolarSystem) -> Number:
+    def set_stargate_data(self, dst: dict[str, Any], src: SolarSystem) -> None:
         if "stargateIDs" not in src:
-            return 0
+            return
 
         stargates = []
-        farthest = 0
         neighbors = {}
 
         for stargate_id in src["stargateIDs"]:
@@ -273,7 +260,8 @@ class SystemBuilder:
                 float(neighbor_pos["y"]),
             )
 
-            farthest = max(farthest, get_distance(stargate["position"]))
+            self.set_farthest(stargate["position"])
+
             self.collidable_types.add(stargate["typeID"])
 
         # A system with stargates is k-space, so it always has a 2D position.
@@ -305,12 +293,11 @@ class SystemBuilder:
                     }
                 )
 
-                farthest = max(farthest, get_distance(stargate["position"]))
+                self.set_farthest(stargate["position"])
+
                 self.collidable_types.add(stargate["typeID"])
 
             dst["disruptedStargates"] = disrupted
-
-        return farthest
 
     def save_system(self, system_id: int, data: dict[str, Any]) -> None:
         out_path = config.paths.system_output / f"{system_id}.json"
@@ -330,6 +317,7 @@ class SystemBuilder:
         }
 
     def build(self, row: SolarSystem) -> BuiltSystem:
+        self.farthest_object = 0.0
         system_id = row["_key"]
         system_name = row["name"]["en"]
         logger.debug("Generating system file for %s (%d)", system_name, system_id)
@@ -355,14 +343,13 @@ class SystemBuilder:
             data["sovFactionName"] = faction_name
 
         self.set_star_data(data, row)
-        planet_farthest = self.set_planet_data(data, row)
-        stargate_farthest = self.set_stargate_data(data, row)
-        farthest = max(planet_farthest, stargate_farthest)
+        self.set_planet_data(data, row)
+        self.set_stargate_data(data, row)
 
         if system_type in _UNBOUNDED_SYSTEM_TYPES:
-            farthest = _UNBOUNDED_FARTHEST
+            self.farthest_object = _UNBOUNDED_FARTHEST
 
-        data["farthestObject"] = round_num(farthest)
+        data["farthestObject"] = round_num(self.farthest_object)
 
         self.save_system(system_id, data)
 
