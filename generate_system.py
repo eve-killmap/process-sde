@@ -314,6 +314,7 @@ class SystemBuilder:
                 sde.stargates_by_id[stargate_id]["destination"]["solarSystemID"]
                 for stargate_id in row.get("stargateIDs", [])
             ],
+            "securityStatus": row["securityStatus"],
         }
 
     def build(self, row: SolarSystem) -> BuiltSystem:
