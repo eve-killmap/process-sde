@@ -60,6 +60,8 @@ class MapGenerator:
 
             destinations.append({"id": destination_id, "type": edge_type})
 
+        security_status = round_num(system["securityStatus"], 2)
+
         record = {
             "name": system_name,
             "x": x,
@@ -67,7 +69,7 @@ class MapGenerator:
             "constellation_id": constellation_id,
             "region_id": region_id,
             "destinations": destinations,
-            "security_status": system["securityStatus"],
+            "security_status": security_status,
         }
 
         self.systems[system_id] = record
