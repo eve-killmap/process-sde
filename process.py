@@ -1,11 +1,10 @@
 import logging
-from pathlib import Path
 
 import sde
 from config import config
 
 from generate_system import SystemBuilder
-from generate_map import MapGenerator
+from generate_map import MapGenerator, NewEdenMapGenerator
 from generate_type_data import generate_type_data
 from slug_index import SlugIndexGenerator
 from systems_index import SystemsIndexGenerator
@@ -22,12 +21,7 @@ def process() -> None:
 
     scale_factors = config.map.scale_factors
     logger.info("Initializing map generators")
-    new_eden_generator = MapGenerator(
-        output_folder=Path("new-eden", "3d"),
-        scale_factor=scale_factors["au"],
-        calc_locale_positions=False,
-    )
-    new_eden_generator_2d = MapGenerator(
+    new_eden_generator = NewEdenMapGenerator(
         output_folder="new-eden", scale_factor=scale_factors["au"]
     )
     anoikis_generator = MapGenerator(
@@ -68,13 +62,7 @@ def process() -> None:
         slug_generator.process_system(built.file_data)
 
         if system_type == 0:
-            new_eden_generator.process_system(map_data)
-            if built.position_2d is not None:
-                new_eden_generator_2d.process_system(map_data, built.position_2d)
-            else:
-                raise ValueError(
-                    f"Missing position2D for solarSystemID {system_id} (it should have one)"
-                )
+            new_eden_generator.process_system(map_data, built.position_2d)
         elif system_type == 1:
             anoikis_generator.process_system(map_data)
         elif system_type == 2:
@@ -92,14 +80,12 @@ def process() -> None:
     slug_generator.finalize()
 
     new_eden_generator.finalize()
-    new_eden_generator_2d.finalize()
     anoikis_generator.finalize()
     ad_generator.finalize()
     tut_generator.finalize()
 
     logger.info("Generating locale data")
     new_eden_generator.process_locales()
-    new_eden_generator_2d.process_locales()
     anoikis_generator.process_locales()
     ad_generator.process_locales()
     tut_generator.process_locales()

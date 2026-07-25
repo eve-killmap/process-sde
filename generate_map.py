@@ -91,6 +91,16 @@ class MapGenerator:
         if self.translate_positions:
             self._translate()
 
+        out = self.build_output()
+
+        output_folder = config.paths.universe_output / self.output_folder
+
+        output_folder.mkdir(parents=True, exist_ok=True)
+
+        output_file = output_folder / "map.json"
+        write_if_changed(output_file, out)
+
+    def build_output(self) -> dict[str, Any]:
         system_ids = sorted(self.systems.keys())
 
         span_x = round_num(self.max_x - self.min_x, config.map.position_round)
@@ -128,12 +138,7 @@ class MapGenerator:
         if self.process_stargates:
             self._process_stargates(system_ids, out)
 
-        output_folder = config.paths.universe_output / self.output_folder
-
-        output_folder.mkdir(parents=True, exist_ok=True)
-
-        output_file = output_folder / "map.json"
-        write_if_changed(output_file, out)
+        return out
 
     def process_locales(self) -> None:
         logger.info("Processing locales for %s", self.output_folder)
@@ -252,16 +257,20 @@ class LocaleGenerator:
         locale = data[id]
 
         if self.calc_position:
-            # Average the already-scaled 2D system positions (the SDE has no 2D
-            # locale position), so no further scaling is applied here.
-            pos = self._calc_position(locale)
-            x, y = process_position(pos, None, p2d=True)
+            position = self._centroid_position(locale)
         else:
-            # Use the SDE's own (3D-only) locale position, scaled to match the
-            # map's system positions.
-            x, y = process_position(locale["position"], self.scale_factor)
+            position = self._sde_position(locale)
 
-        return {"name": locale["name"]["en"], "position": {"x": x, "y": y}}
+        return {"name": locale["name"]["en"], "position": position}
+
+    def _centroid_position(self, locale: Mapping[str, Any]) -> dict[str, Number]:
+        pos = self._calc_position(locale)
+        x, y = process_position(pos, None, p2d=True)
+        return {"x": x, "y": y}
+
+    def _sde_position(self, locale: Mapping[str, Any]) -> dict[str, Number]:
+        x, y = process_position(locale["position"], self.scale_factor)
+        return {"x": x, "y": y}
 
     def _calc_position(self, data: Mapping[str, Any]) -> dict[str, float]:
         x_sum = float(0)
@@ -286,3 +295,101 @@ class LocaleGenerator:
         y = y_sum / points
 
         return {"x": x, "y": y}
+
+
+class NewEdenLocaleGenerator(LocaleGenerator):
+
+    def __init__(
+        self,
+        systems: dict[int, dict[str, Any]],
+        output_folder: str | Path,
+        scale_factor: float,
+    ) -> None:
+        super().__init__(systems, output_folder, scale_factor)
+
+    def _process_locale(
+        self, id: int, data: Mapping[int, Mapping[str, Any]]
+    ) -> dict[str, Any]:
+        locale = data[id]
+
+        return {
+            "name": locale["name"]["en"],
+            "position": self._centroid_position(locale),
+            "position3D": self._sde_position(locale),
+        }
+
+
+class NewEdenMapGenerator(MapGenerator):
+
+    def __init__(self, output_folder: str | Path, scale_factor: float) -> None:
+        super().__init__(output_folder, scale_factor)
+        self.min_x3d: Number = math.inf
+        self.max_x3d: Number = -math.inf
+        self.min_y3d: Number = math.inf
+        self.max_y3d: Number = -math.inf
+
+    def process_system(
+        self, system: dict[str, Any], position_2d: Mapping[str, Any] | None = None
+    ) -> None:
+        if position_2d is None:
+            raise ValueError(
+                f"Missing position2D for solarSystemID {system['solarSystemID']} "
+                "(New Eden systems must have one)"
+            )
+
+        super().process_system(system, position_2d)
+
+        x3d, y3d = process_position(system["position"], self.scale_factor)
+        record = self.systems[system["solarSystemID"]]
+        record["x3d"] = x3d
+        record["y3d"] = y3d
+
+        self.min_x3d = min(self.min_x3d, x3d)
+        self.max_x3d = max(self.max_x3d, x3d)
+        self.min_y3d = min(self.min_y3d, y3d)
+        self.max_y3d = max(self.max_y3d, y3d)
+
+    def finalize(self) -> None:
+        self.min_x3d = round_num(self.min_x3d, config.map.position_round)
+        self.max_x3d = round_num(self.max_x3d, config.map.position_round)
+        self.min_y3d = round_num(self.min_y3d, config.map.position_round)
+        self.max_y3d = round_num(self.max_y3d, config.map.position_round)
+
+        super().finalize()
+
+    def build_output(self) -> dict[str, Any]:
+        out = super().build_output()
+
+        system_ids = sorted(self.systems.keys())
+
+        positions_3d: list[Number] = []
+        for system_id in system_ids:
+            record = self.systems[system_id]
+            positions_3d.append(record["x3d"])
+            positions_3d.append(record["y3d"])
+
+        span_x = round_num(self.max_x3d - self.min_x3d, config.map.position_round)
+        span_y = round_num(self.max_y3d - self.min_y3d, config.map.position_round)
+
+        out["meta3D"] = {
+            "bbox": {
+                "minX": self.min_x3d,
+                "maxX": self.max_x3d,
+                "minY": self.min_y3d,
+                "maxY": self.max_y3d,
+            },
+            "span": {"x": span_x, "y": span_y},
+        }
+        out["positions3D"] = positions_3d
+
+        return out
+
+    def process_locales(self) -> None:
+        logger.info("Processing locales for %s", self.output_folder)
+        locale_generator = NewEdenLocaleGenerator(
+            self.systems,
+            self.output_folder,
+            self.scale_factor,
+        )
+        locale_generator.process()
+        locale_generator.save_files()
