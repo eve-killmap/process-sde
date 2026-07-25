@@ -60,8 +60,6 @@ class MapGenerator:
 
             destinations.append({"id": destination_id, "type": edge_type})
 
-        security_color = int(max(system["securityStatus"], 0.0) * 10)
-
         record = {
             "name": system_name,
             "x": x,
@@ -69,7 +67,7 @@ class MapGenerator:
             "constellation_id": constellation_id,
             "region_id": region_id,
             "destinations": destinations,
-            "security_color": security_color
+            "security_status": system["securityStatus"],
         }
 
         self.systems[system_id] = record
@@ -120,9 +118,9 @@ class MapGenerator:
             "constellationIDs": [
                 self.systems[system_id]["constellation_id"] for system_id in system_ids
             ],
-            "securityColors": [
-                self.systems[system_id]["security_color"] for system_id in system_ids
-            ]
+            "securityStatuses": [
+                self.systems[system_id]["security_status"] for system_id in system_ids
+            ],
         }
 
         if self.process_stargates:
