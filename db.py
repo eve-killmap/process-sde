@@ -43,6 +43,9 @@ def init_schema(conn: connection) -> None:
             published BOOL NOT NULL,
             last_updated TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
+
+        CREATE EXTENSION IF NOT EXISTS pg_trgm;
+        CREATE INDEX IF NOT EXISTS idx_types_name_trgm ON types USING gin (name gin_trgm_ops);
     """
 
     with get_cursor(conn) as cursor:
