@@ -24,7 +24,8 @@ def fetch_groups() -> set[int]:
 
     for id, row in sde.groups_by_id.items():
         if row["categoryID"] in config.type_data.fetch_categories:
-            groups.add(id)
+            if row["published"]:
+                groups.add(id)
 
     return groups
 
@@ -34,7 +35,8 @@ def fetch_types(groups: Collection[int]) -> set[int]:
 
     for id, row in sde.types_by_id.items():
         if row["groupID"] in groups:
-            types.add(id)
+            if row["published"]:
+                types.add(id)
 
     return types
 
