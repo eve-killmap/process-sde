@@ -193,7 +193,6 @@ class SystemBuilder:
 
         dst["moons"] = moons
 
-
     def set_planet_data(self, dst: dict[str, Any], src: SolarSystem) -> None:
         if "planetIDs" not in src:
             return
