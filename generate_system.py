@@ -284,7 +284,7 @@ class SystemBuilder:
 
                 disrupted.append(
                     {
-                        "stargateID": stargate_id,
+                        "stargateID": int(stargate_id),
                         "destination": stargate["destination"],
                         "position": round_position(stargate["position"]),
                         "destName": dest_name,
