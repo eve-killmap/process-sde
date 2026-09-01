@@ -4,7 +4,7 @@ import pytest
 
 import generate_map
 import sde
-from generate_map import MapGenerator, NewEdenMapGenerator
+from generate_map import AnoikisMapGenerator, MapGenerator, NewEdenMapGenerator
 
 
 def test_process_system_builds_edges_from_map_data(monkeypatch):
@@ -243,3 +243,80 @@ def test_new_eden_locales_carry_2d_and_3d_positions(monkeypatch):
     region = saved["regions.json"][9]
     assert region["position"] == {"x": 10, "y": 20}
     assert region["position3D"] == {"x": 5, "y": 6}
+
+
+def test_anoikis_map_emits_wormhole_arrays(monkeypatch):
+    saved = {}
+    monkeypatch.setattr(
+        generate_map,
+        "write_if_changed",
+        lambda path, data: saved.update({path.name: data}) or True,
+    )
+
+    gen = AnoikisMapGenerator(
+        output_folder="anoikis", scale_factor=1.0, process_stargates=False
+    )
+    gen.process_system(
+        {
+            "solarSystemID": 1,
+            "name": "J1",
+            "position": {"x": 0.0, "y": 0.0, "z": 0.0},
+            "constellationID": 5,
+            "regionID": 7,
+            "securityStatus": -0.9,
+            "stargateDestinations": [],
+            "wormholeClassID": 6,
+            "wormholeEffect": 3,
+        }
+    )
+    gen.process_system(
+        {
+            "solarSystemID": 2,
+            "name": "J2",
+            "position": {"x": 1.0, "y": 0.0, "z": 1.0},
+            "constellationID": 5,
+            "regionID": 7,
+            "securityStatus": -0.9,
+            "stargateDestinations": [],
+            "wormholeClassID": 1,  # no wormholeEffect
+        }
+    )
+
+    gen.finalize()
+    out = saved["map.json"]
+
+    assert out["systemIDs"] == [1, 2]
+    assert out["wormholeClassIDs"] == [6, 1]
+    # Effectless system takes the 0 sentinel, index-aligned to systemIDs.
+    assert out["wormholeEffects"] == [3, 0]
+
+
+def test_anoikis_map_uses_zero_sentinel_for_missing_class(monkeypatch):
+    saved = {}
+    monkeypatch.setattr(
+        generate_map,
+        "write_if_changed",
+        lambda path, data: saved.update({path.name: data}) or True,
+    )
+
+    gen = AnoikisMapGenerator(
+        output_folder="anoikis", scale_factor=1.0, process_stargates=False
+    )
+    # Class never resolved -> map data omits both keys; arrays must not crash.
+    gen.process_system(
+        {
+            "solarSystemID": 1,
+            "name": "J1",
+            "position": {"x": 0.0, "y": 0.0, "z": 0.0},
+            "constellationID": 5,
+            "regionID": 7,
+            "securityStatus": -0.9,
+            "stargateDestinations": [],
+        }
+    )
+
+    gen.finalize()
+    out = saved["map.json"]
+
+    assert out["wormholeClassIDs"] == [0]
+    assert out["wormholeEffects"] == [0]

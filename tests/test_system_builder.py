@@ -185,3 +185,121 @@ def test_build_prefers_system_faction_over_constellation_and_region(monkeypatch)
     built = SystemBuilder().build(row)
 
     assert built.file_data["sovFactionName"] == "System Faction"
+
+
+def _wormhole_row():
+    return {
+        "_key": 31000005,  # second digit "1" -> anoikis/wormhole system type
+        "constellationID": 200,
+        "regionID": 100,
+        "name": {"en": "J000005"},
+        "position": {"x": 1.0, "y": 2.0, "z": 3.0},
+        "radius": 1000.0,
+        "securityStatus": -0.99,
+        "wormholeClassID": 6,
+    }
+
+
+def test_set_wormhole_data_uses_system_level_class(monkeypatch):
+    monkeypatch.setattr(sde, "secondary_suns", {})
+    dst = {}
+    SystemBuilder().set_wormhole_data(dst, _wormhole_row())
+    assert dst["wormholeClassID"] == 6
+    assert "wormholeEffect" not in dst
+
+
+def test_set_wormhole_data_falls_back_constellation_then_region(monkeypatch):
+    monkeypatch.setattr(sde, "secondary_suns", {})
+
+    # constellation carries the class when the system does not
+    monkeypatch.setattr(sde, "constellations_by_id", {200: {"wormholeClassID": 3}})
+    monkeypatch.setattr(sde, "regions_by_id", {100: {"wormholeClassID": 9}})
+    row = _wormhole_row()
+    del row["wormholeClassID"]
+    dst = {}
+    SystemBuilder().set_wormhole_data(dst, row)
+    assert dst["wormholeClassID"] == 3
+
+    # neither system nor constellation -> region
+    monkeypatch.setattr(sde, "constellations_by_id", {200: {}})
+    dst = {}
+    SystemBuilder().set_wormhole_data(dst, row)
+    assert dst["wormholeClassID"] == 9
+
+
+def test_set_wormhole_data_omits_class_when_unresolved(monkeypatch):
+    monkeypatch.setattr(sde, "constellations_by_id", {200: {}})
+    monkeypatch.setattr(sde, "regions_by_id", {100: {}})
+    monkeypatch.setattr(sde, "secondary_suns", {})
+    row = _wormhole_row()
+    del row["wormholeClassID"]
+    dst = {}
+    SystemBuilder().set_wormhole_data(dst, row)  # warns, must not raise
+    assert "wormholeClassID" not in dst
+
+
+def test_set_wormhole_data_sets_effect_from_secondary_sun(monkeypatch):
+    monkeypatch.setattr(sde, "secondary_suns", {31000005: {"typeID": 30577}})  # -> 4
+    dst = {}
+    SystemBuilder().set_wormhole_data(dst, _wormhole_row())
+    assert dst["wormholeEffect"] == 4
+
+
+def test_set_wormhole_data_omits_effect_when_no_secondary_sun(monkeypatch):
+    monkeypatch.setattr(sde, "secondary_suns", {})
+    dst = {}
+    SystemBuilder().set_wormhole_data(dst, _wormhole_row())
+    assert "wormholeEffect" not in dst
+
+
+def test_set_wormhole_data_omits_effect_when_undecodable(monkeypatch):
+    monkeypatch.setattr(sde, "secondary_suns", {31000005: {"typeID": 999999}})  # -> None
+    dst = {}
+    SystemBuilder().set_wormhole_data(dst, _wormhole_row())  # warns, must not raise
+    assert "wormholeEffect" not in dst
+
+
+def _wormhole_universe(monkeypatch):
+    monkeypatch.setattr(sde, "constellations_by_id", {200: {"name": {"en": "C"}}})
+    monkeypatch.setattr(sde, "regions_by_id", {100: {"name": {"en": "R"}}})
+    monkeypatch.setattr(sde, "factions_by_id", {})
+    monkeypatch.setattr("generate_system.write_if_changed", lambda path, data: True)
+
+
+def test_build_wormhole_system_populates_file_and_map_data(monkeypatch):
+    _wormhole_universe(monkeypatch)
+    monkeypatch.setattr(sde, "secondary_suns", {31000005: {"typeID": 30574}})  # -> 1
+
+    built = SystemBuilder().build(_wormhole_row())
+
+    assert built.system_type == 1
+    assert built.file_data["wormholeClassID"] == 6
+    assert built.file_data["wormholeEffect"] == 1
+    assert built.map_data["wormholeClassID"] == 6
+    assert built.map_data["wormholeEffect"] == 1
+
+
+def test_build_effectless_wormhole_omits_effect_without_crashing(monkeypatch):
+    _wormhole_universe(monkeypatch)
+    monkeypatch.setattr(sde, "secondary_suns", {})  # this system has no effect
+
+    built = SystemBuilder().build(_wormhole_row())
+
+    assert built.file_data["wormholeClassID"] == 6
+    assert "wormholeEffect" not in built.file_data
+    # Regression: appending map data for an effectless system used to KeyError.
+    assert built.map_data["wormholeClassID"] == 6
+    assert "wormholeEffect" not in built.map_data
+
+
+def test_build_non_wormhole_system_has_no_wormhole_data(monkeypatch):
+    _minimal_universe(monkeypatch)
+    monkeypatch.setattr("generate_system.write_if_changed", lambda path, data: True)
+
+    built = SystemBuilder().build(_minimal_row())
+
+    assert built.system_type == 0
+    assert "wormholeClassID" not in built.file_data
+    assert "wormholeEffect" not in built.file_data
+    assert "wormholeClassID" not in built.map_data
+    assert "wormholeEffect" not in built.map_data

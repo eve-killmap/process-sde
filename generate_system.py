@@ -17,6 +17,7 @@ from utils import (
     scale_neighbors,
     set_nested_if_present,
     write_if_changed,
+    translate_wormhole_effect
 )
 
 logger = logging.getLogger(__name__)
@@ -298,6 +299,34 @@ class SystemBuilder:
 
             dst["disruptedStargates"] = disrupted
 
+    def set_wormhole_data(self, dst: dict[str, Any], src: SolarSystem) -> None:
+        solar_system_id = src["_key"]
+
+        wormhole_class_id = None
+        if "wormholeClassID" in src:
+            wormhole_class_id = src["wormholeClassID"]
+        else:
+            constellation = sde.constellations_by_id[src["constellationID"]]
+            if "wormholeClassID" in constellation:
+                wormhole_class_id = constellation["wormholeClassID"]
+            else:
+                region = sde.regions_by_id[src["regionID"]]
+                if "wormholeClassID" in region:
+                    wormhole_class_id = region["wormholeClassID"]
+
+        if wormhole_class_id is not None:
+            dst["wormholeClassID"] = wormhole_class_id
+        else:
+            logger.warning("Unable to ascertain wormhole class ID for system %d", solar_system_id)
+
+        if solar_system_id in sde.secondary_suns:
+            secondary_sun = sde.secondary_suns[solar_system_id]
+            effect = translate_wormhole_effect(secondary_sun["typeID"])
+            if effect is not None:
+                dst["wormholeEffect"] = effect
+            else:
+                logger.warning("Unable to decode wormhole effect for system %d", solar_system_id)
+
     def save_system(self, system_id: int, data: dict[str, Any]) -> None:
         out_path = config.paths.system_output / f"{system_id}.json"
         write_if_changed(out_path, data)
@@ -315,6 +344,12 @@ class SystemBuilder:
             ],
             "securityStatus": row["securityStatus"],
         }
+
+    def _append_wormhole_map_data(self, map_data: dict[str, Any], file_data: dict[str, Any]) -> None:
+        if file_data.get("wormholeClassID"):
+            map_data["wormholeClassID"] = file_data["wormholeClassID"]
+        if file_data.get("wormholeEffect"):
+            map_data["wormholeEffect"] = file_data["wormholeEffect"]
 
     def build(self, row: SolarSystem) -> BuiltSystem:
         self.farthest_object = 0.0
@@ -342,6 +377,9 @@ class SystemBuilder:
         if faction_name is not None:
             data["sovFactionName"] = faction_name
 
+        if system_type == 1:
+            self.set_wormhole_data(data, row)
+
         self.set_star_data(data, row)
         self.set_planet_data(data, row)
         self.set_stargate_data(data, row)
@@ -353,9 +391,13 @@ class SystemBuilder:
 
         self.save_system(system_id, data)
 
+        map_data = self._build_map_data(row)
+        if system_type == 1:
+            self._append_wormhole_map_data(map_data, data)
+
         return BuiltSystem(
             file_data=data,
-            map_data=self._build_map_data(row),
+            map_data=map_data,
             position_2d=row.get("position2D"),
             system_type=system_type,
         )

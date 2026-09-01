@@ -11,6 +11,7 @@ from utils import (
     round_num,
     round_position,
     slugify,
+    translate_wormhole_effect,
     write_if_changed,
 )
 
@@ -91,3 +92,22 @@ def test_write_if_changed_tracks_new_unchanged_and_modified(tmp_path):
     assert skipped == 1
     assert added == [path]
     assert modified == [path]
+
+
+@pytest.mark.parametrize(
+    "type_id, expected",
+    [
+        (30574, 1),
+        (30575, 2),
+        (30576, 3),
+        (30577, 4),
+        (30669, 5),
+        (30670, 6),
+    ],
+)
+def test_translate_wormhole_effect_maps_known_secondary_suns(type_id, expected):
+    assert translate_wormhole_effect(type_id) == expected
+
+
+def test_translate_wormhole_effect_returns_none_for_unknown_type():
+    assert translate_wormhole_effect(12345) is None

@@ -27,6 +27,7 @@ from schema import (
     Region,
     SdeMeta,
     SolarSystem,
+    SecondarySun,
     Star,
     Stargate,
     StationOperation,
@@ -40,6 +41,7 @@ sde: list[SdeMeta] = []
 build_number: int | None = None
 
 solar_systems: dict[int, SolarSystem] = {}
+secondary_suns: dict[int, SecondarySun] = {}
 constellations_by_id: dict[int, Constellation] = {}
 regions_by_id: dict[int, Region] = {}
 stars_by_id: dict[int, Star] = {}
@@ -79,14 +81,18 @@ def load_json(path: Path) -> Any:
         return json.load(f)
 
 
+def _by_field(rows: Iterable[Any], field: str) -> dict[int, Any]:
+    return {row[field]: row for row in rows}
+
+
 def _by_key(rows: Iterable[Any]) -> dict[int, Any]:
-    return {row["_key"]: row for row in rows}
+    return _by_field(rows, "_key")
 
 
 def load(force: bool = False) -> None:
     """Read the SDE and static data files into the module-level tables."""
     global _loaded, sde, build_number
-    global solar_systems, constellations_by_id, regions_by_id, stars_by_id
+    global solar_systems, secondary_suns, constellations_by_id, regions_by_id, stars_by_id
     global stargates_by_id, planets_by_id, moons_by_id, belts_by_id, factions_by_id
     global stations_by_id, npc_corporations_by_id
     global station_operations_by_id, groups_by_id, types_by_id
@@ -104,6 +110,7 @@ def load(force: bool = False) -> None:
     build_number = sde[0]["buildNumber"]
 
     solar_systems = _by_key(load_jsonl(sde_input / "mapSolarSystems.jsonl"))
+    secondary_suns = _by_field(load_jsonl(sde_input / "mapSecondarySuns.jsonl"), "solarSystemID")
     constellations_by_id = _by_key(load_jsonl(sde_input / "mapConstellations.jsonl"))
     regions_by_id = _by_key(load_jsonl(sde_input / "mapRegions.jsonl"))
     stars_by_id = _by_key(load_jsonl(sde_input / "mapStars.jsonl"))

@@ -220,3 +220,21 @@ def scale_neighbors(
         )
 
     return result
+
+
+def translate_wormhole_effect(type_id: int) -> int | None:
+    match type_id:
+        case 30574:
+            return 1
+        case 30575:
+            return 2
+        case 30576:
+            return 3
+        case 30577:
+            return 4
+        case 30669:
+            return 5
+        case 30670:
+            return 6
+        case _:
+            return None

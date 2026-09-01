@@ -4,7 +4,7 @@ import sde
 from config import config
 
 from generate_system import SystemBuilder
-from generate_map import MapGenerator, NewEdenMapGenerator
+from generate_map import MapGenerator, NewEdenMapGenerator, AnoikisMapGenerator
 from generate_type_data import generate_type_data
 from slug_index import SlugIndexGenerator
 from systems_index import SystemsIndexGenerator
@@ -24,7 +24,7 @@ def process() -> None:
     new_eden_generator = NewEdenMapGenerator(
         output_folder="new-eden", scale_factor=scale_factors["au"]
     )
-    anoikis_generator = MapGenerator(
+    anoikis_generator = AnoikisMapGenerator(
         output_folder="anoikis",
         scale_factor=scale_factors["au"],
         process_stargates=False,

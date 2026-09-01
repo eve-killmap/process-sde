@@ -41,6 +41,15 @@ class SolarSystem(TypedDict):
     planetIDs: NotRequired[list[int]]
     stargateIDs: NotRequired[list[int]]
     position2D: NotRequired[Vec2]
+    wormholeClassID: NotRequired[int]
+
+
+class SecondarySun(TypedDict):
+    _key: int
+    effectBeaconTypeID: int
+    position: Vec3
+    solarSystemID: int
+    typeID: int
 
 
 class Constellation(TypedDict):
@@ -50,6 +59,7 @@ class Constellation(TypedDict):
     regionID: int
     solarSystemIDs: list[int]
     factionID: NotRequired[int]
+    wormholeClassID: NotRequired[int]
 
 
 class Region(TypedDict):
@@ -58,6 +68,7 @@ class Region(TypedDict):
     position: Vec3
     constellationIDs: list[int]
     factionID: NotRequired[int]
+    wormholeClassID: NotRequired[int]
 
 
 class Star(TypedDict):

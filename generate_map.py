@@ -393,3 +393,36 @@ class NewEdenMapGenerator(MapGenerator):
         )
         locale_generator.process()
         locale_generator.save_files()
+
+
+class AnoikisMapGenerator(MapGenerator):
+
+    def process_system(
+        self, system: dict[str, Any], position_2d: Mapping[str, Any] | None = None
+    ) -> None:
+        super().process_system(system, position_2d)
+
+        record = self.systems[system["solarSystemID"]]
+        if system.get("wormholeClassID"):
+            record["wormholeClassID"] = system["wormholeClassID"]
+        if system.get("wormholeEffect"):
+            record["wormholeEffect"] = system["wormholeEffect"]
+
+    def build_output(self) -> dict[str, Any]:
+        out = super().build_output()
+
+        system_ids = sorted(self.systems.keys())
+
+        wormhole_classes: list[int] = []
+        wormhole_effects: list[int] = []
+        for system_id in system_ids:
+            record = self.systems[system_id]
+            # 0 is the sentinel for "no class"/"no effect"; real class and
+            # effect IDs are always >= 1.
+            wormhole_classes.append(record.get("wormholeClassID", 0))
+            wormhole_effects.append(record.get("wormholeEffect", 0))
+
+        out["wormholeClassIDs"] = wormhole_classes
+        out["wormholeEffects"] = wormhole_effects
+
+        return out
