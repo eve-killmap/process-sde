@@ -110,7 +110,9 @@ def load(force: bool = False) -> None:
     build_number = sde[0]["buildNumber"]
 
     solar_systems = _by_key(load_jsonl(sde_input / "mapSolarSystems.jsonl"))
-    secondary_suns = _by_field(load_jsonl(sde_input / "mapSecondarySuns.jsonl"), "solarSystemID")
+    secondary_suns = _by_field(
+        load_jsonl(sde_input / "mapSecondarySuns.jsonl"), "solarSystemID"
+    )
     constellations_by_id = _by_key(load_jsonl(sde_input / "mapConstellations.jsonl"))
     regions_by_id = _by_key(load_jsonl(sde_input / "mapRegions.jsonl"))
     stars_by_id = _by_key(load_jsonl(sde_input / "mapStars.jsonl"))

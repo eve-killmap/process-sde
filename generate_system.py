@@ -17,7 +17,7 @@ from utils import (
     scale_neighbors,
     set_nested_if_present,
     write_if_changed,
-    translate_wormhole_effect
+    translate_wormhole_effect,
 )
 
 logger = logging.getLogger(__name__)
@@ -317,7 +317,9 @@ class SystemBuilder:
         if wormhole_class_id is not None:
             dst["wormholeClassID"] = wormhole_class_id
         else:
-            logger.warning("Unable to ascertain wormhole class ID for system %d", solar_system_id)
+            logger.warning(
+                "Unable to ascertain wormhole class ID for system %d", solar_system_id
+            )
 
         if solar_system_id in sde.secondary_suns:
             secondary_sun = sde.secondary_suns[solar_system_id]
@@ -325,7 +327,9 @@ class SystemBuilder:
             if effect is not None:
                 dst["wormholeEffect"] = effect
             else:
-                logger.warning("Unable to decode wormhole effect for system %d", solar_system_id)
+                logger.warning(
+                    "Unable to decode wormhole effect for system %d", solar_system_id
+                )
 
     def save_system(self, system_id: int, data: dict[str, Any]) -> None:
         out_path = config.paths.system_output / f"{system_id}.json"
@@ -345,7 +349,9 @@ class SystemBuilder:
             "securityStatus": row["securityStatus"],
         }
 
-    def _append_wormhole_map_data(self, map_data: dict[str, Any], file_data: dict[str, Any]) -> None:
+    def _append_wormhole_map_data(
+        self, map_data: dict[str, Any], file_data: dict[str, Any]
+    ) -> None:
         if file_data.get("wormholeClassID"):
             map_data["wormholeClassID"] = file_data["wormholeClassID"]
         if file_data.get("wormholeEffect"):

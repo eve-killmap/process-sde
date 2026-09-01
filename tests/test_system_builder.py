@@ -253,7 +253,9 @@ def test_set_wormhole_data_omits_effect_when_no_secondary_sun(monkeypatch):
 
 
 def test_set_wormhole_data_omits_effect_when_undecodable(monkeypatch):
-    monkeypatch.setattr(sde, "secondary_suns", {31000005: {"typeID": 999999}})  # -> None
+    monkeypatch.setattr(
+        sde, "secondary_suns", {31000005: {"typeID": 999999}}
+    )  # -> None
     dst = {}
     SystemBuilder().set_wormhole_data(dst, _wormhole_row())  # warns, must not raise
     assert "wormholeEffect" not in dst
