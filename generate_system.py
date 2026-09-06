@@ -9,7 +9,7 @@ from schema import Planet, SolarSystem, Vec2, Vec3
 from utils import (
     Number,
     get_distance,
-    get_moon_warp_in,
+    get_large_object_warp_in,
     get_planet_warp_in,
     get_sun_warp_in,
     round_num,
@@ -119,6 +119,10 @@ class SystemBuilder:
 
             if "radius" in belt:
                 belt_obj["radius"] = round_num(belt["radius"])
+                if belt_obj["radius"] >= 90000:
+                    belt_obj["warpPosition"] = get_large_object_warp_in(
+                        belt["position"], belt["radius"]
+                    )
 
             belts.append(belt_obj)
 
@@ -172,7 +176,7 @@ class SystemBuilder:
                 "moonID": moon_id,
                 "position": round_position(moon["position"]),
                 "radius": round_num(moon["radius"]),
-                "warpPosition": get_moon_warp_in(moon["position"], moon["radius"]),
+                "warpPosition": get_large_object_warp_in(moon["position"], moon["radius"]),
                 "orbitIndex": moon["orbitIndex"],
             }
 
