@@ -158,7 +158,9 @@ def get_sun_warp_in(radius: float) -> dict[str, Number]:
     return {"x": round_num(x), "y": round_num(y), "z": round_num(z)}
 
 
-def get_large_object_warp_in(position: Mapping[str, Any], radius: float) -> dict[str, Number]:
+def get_large_object_warp_in(
+    position: Mapping[str, Any], radius: float
+) -> dict[str, Number]:
     x = (radius + 5000000) * math.cos(radius)
     y = 1.3 * radius - 7500
     z = -(radius + 5000000) * math.sin(radius)
