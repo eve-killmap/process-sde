@@ -20,7 +20,6 @@ def test_defaults_used_when_no_yaml_and_empty_env(tmp_path):
     assert cfg.map.position_round == 2
     assert cfg.map.neighbor_map_size == 128
     assert cfg.map.scale_factors["au"] == pytest.approx(1.496e11)
-    assert 6 in cfg.type_data.fetch_categories
     assert cfg.type_data.default_icon == 4533
     assert 19000001 in cfg.skip_system_ids
     assert cfg.database_url is None

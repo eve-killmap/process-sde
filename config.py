@@ -80,8 +80,6 @@ class MapConfig:
 
 @dataclass(frozen=True)
 class TypeDataConfig:
-    fetch_categories: list[int]
-    whitelist_types: list[int]
     npc_groups: list[int]
     default_icon: int
 
@@ -242,16 +240,6 @@ def load_config(
     )
 
     type_data_config = TypeDataConfig(
-        fetch_categories=_as_int_list(
-            type_cfg.get("fetch_categories", [6, 18, 22, 23, 39, 40, 65, 87]),
-            "type_data.fetch_categories",
-        ),
-        whitelist_types=_as_int_list(
-            type_cfg.get(
-                "whitelist_types", [2233, 3962, 4318, 45470, 45474, 46653, 46654, 81080]
-            ),
-            "type_data.whitelist_types",
-        ),
         npc_groups=_as_int_list(
             type_cfg.get(
                 "npc_groups",

@@ -1,5 +1,6 @@
 import logging
 from collections.abc import Collection
+from psycopg2.extensions import connection
 
 from config import config
 from utils import write_if_changed
@@ -9,34 +10,12 @@ import db
 logger = logging.getLogger(__name__)
 
 
-def fetch_wl_groups() -> set[int]:
-    groups = set()
-
-    for type_id in config.type_data.whitelist_types:
-        type = sde.types_by_id[type_id]
-        groups.add(type["groupID"])
-
-    return groups
-
-
-def fetch_groups() -> set[int]:
-    groups = set()
-
-    for id, row in sde.groups_by_id.items():
-        if row["categoryID"] in config.type_data.fetch_categories:
-            if row["published"]:
-                groups.add(id)
-
-    return groups
-
-
 def fetch_types(groups: Collection[int]) -> set[int]:
     types = set()
 
     for id, row in sde.types_by_id.items():
         if row["groupID"] in groups:
-            if row["published"]:
-                types.add(id)
+            types.add(id)
 
     return types
 
@@ -201,7 +180,7 @@ def generate_npc_types(groups: Collection[int]) -> None:
     write_if_changed(output_path, out)
 
 
-def generate_type_db() -> None:
+def generate_type_db(conn: connection) -> None:
     logger.debug("Syncing type data to database")
     types = []
     for id, row in sde.types_by_id.items():
@@ -217,22 +196,29 @@ def generate_type_db() -> None:
         types.append(type)
 
     logger.debug("Inserting %d types into database", len(types))
-    with db.get_connection() as conn:
-        changed = db.insert_types_batch(conn, types)
 
-        logger.info("Updated %s types in database", changed)
+    changed = db.insert_types_batch(conn, types)
+
+    logger.info("Updated %s types in database", changed)
 
 
 def generate_type_data(collidable_types: Collection[int]) -> None:
-    groups = fetch_groups()
-    types = fetch_types(groups)
+    with db.get_connection() as conn:
+        generate_type_db(conn)
+        types = db.fetch_types(conn)
 
-    wl_groups = fetch_wl_groups()
-    for wl_group in wl_groups:
-        groups.add(wl_group)
+    if not types:
+        raise RuntimeError(
+            "mv_ship_search returned no types; refusing to overwrite type data "
+            "with empty files"
+        )
 
-    for type_id in config.type_data.whitelist_types:
-        types.add(type_id)
+    retired_types = types - sde.types_by_id.keys()
+    if retired_types:
+        logger.warning("Dropping %d type(s) absent from the SDE: %s", len(retired_types), sorted(retired_types))
+
+    types &= sde.types_by_id.keys()
+    groups = {sde.types_by_id[t]["groupID"] for t in types}
 
     generate_type_names(types)
     generate_type_tree(types)
@@ -241,5 +227,3 @@ def generate_type_data(collidable_types: Collection[int]) -> None:
     generate_type_metas(types)
     generate_type_radii(collidable_types)
     generate_npc_types(config.type_data.npc_groups)
-
-    generate_type_db()

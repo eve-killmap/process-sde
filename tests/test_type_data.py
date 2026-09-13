@@ -1,29 +1,24 @@
-"""Tests for the config-driven type/group selection logic."""
+"""Tests for type/group selection and the empty-view guard."""
+
+import contextlib
+
+import pytest
 
 import generate_type_data as gtd
 import sde
-from config import load_config
+
+GENERATORS = (
+    "generate_type_names",
+    "generate_type_tree",
+    "generate_group_names",
+    "generate_brackets",
+    "generate_type_metas",
+    "generate_type_radii",
+    "generate_npc_types",
+)
 
 
-def _config_with(tmp_path, fetch_categories, whitelist_types):
-    yaml = tmp_path / "config.yml"
-    yaml.write_text(
-        f"type_data:\n  fetch_categories: {fetch_categories}\n  whitelist_types: {whitelist_types}\n",
-        encoding="utf-8",
-    )
-    return load_config(yaml_path=yaml, env={}, base_dir=tmp_path)
-
-
-def test_fetch_groups_filters_by_configured_categories(tmp_path, monkeypatch):
-    monkeypatch.setattr(gtd, "config", _config_with(tmp_path, [6], [100]))
-    monkeypatch.setattr(
-        sde, "groups_by_id", {10: {"categoryID": 6}, 11: {"categoryID": 99}}
-    )
-
-    assert gtd.fetch_groups() == {10}
-
-
-def test_fetch_types_filters_by_group(tmp_path, monkeypatch):
+def test_fetch_types_filters_by_group(monkeypatch):
     monkeypatch.setattr(
         sde,
         "types_by_id",
@@ -33,12 +28,55 @@ def test_fetch_types_filters_by_group(tmp_path, monkeypatch):
     assert gtd.fetch_types({10}) == {100, 200}
 
 
-def test_fetch_wl_groups_resolves_whitelist_type_groups(tmp_path, monkeypatch):
-    monkeypatch.setattr(gtd, "config", _config_with(tmp_path, [6], [100, 200]))
+def test_fetch_types_includes_unpublished_types(monkeypatch):
+    # fetch_types now serves only the NPC-group path, and npcTypes.json must
+    # still cover types seen in historical loss mails, so `published` is
+    # deliberately not filtered.
     monkeypatch.setattr(
         sde,
         "types_by_id",
-        {100: {"groupID": 10}, 200: {"groupID": 10}, 300: {"groupID": 99}},
+        {
+            100: {"groupID": 10, "published": False},
+            200: {"groupID": 10, "published": True},
+        },
     )
 
-    assert gtd.fetch_wl_groups() == {10}
+    assert gtd.fetch_types({10}) == {100, 200}
+
+
+@contextlib.contextmanager
+def _fake_connection():
+    yield object()
+
+
+def _stub_db(monkeypatch, mv_types):
+    monkeypatch.setattr(gtd.db, "get_connection", _fake_connection)
+    monkeypatch.setattr(gtd, "generate_type_db", lambda conn: None)
+    monkeypatch.setattr(gtd.db, "fetch_types", lambda conn: set(mv_types))
+
+
+def test_generate_type_data_raises_when_view_is_empty(monkeypatch):
+    writes = []
+    _stub_db(monkeypatch, set())
+    monkeypatch.setattr(
+        gtd, "write_if_changed", lambda path, data: writes.append(path) or True
+    )
+
+    with pytest.raises(RuntimeError, match="mv_ship_search"):
+        gtd.generate_type_data(collidable_types=set())
+
+    # The guard must fire before any generator runs: an empty view must never
+    # clobber good output.
+    assert writes == []
+
+
+def test_generate_type_data_proceeds_when_view_has_types(monkeypatch):
+    called = []
+    _stub_db(monkeypatch, {100})
+    monkeypatch.setattr(sde, "types_by_id", {100: {"groupID": 10}})
+    for name in GENERATORS:
+        monkeypatch.setattr(gtd, name, lambda *a, n=name, **k: called.append(n))
+
+    gtd.generate_type_data(collidable_types=set())
+
+    assert called == list(GENERATORS)

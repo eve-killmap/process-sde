@@ -105,3 +105,9 @@ def insert_types_batch(conn: connection, types: list[dict[str, Any]]) -> int:
 
     conn.commit()
     return len(rows)
+
+
+def fetch_types(conn: connection) -> set[int]:
+    with get_cursor(conn) as cursor:
+        cursor.execute("SELECT type_id FROM mv_ship_search")
+        return {row[0] for row in cursor}
