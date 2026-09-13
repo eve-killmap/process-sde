@@ -155,6 +155,7 @@ class Type(TypedDict):
     name: LocalizedText
     published: bool
     factionID: NotRequired[int]
+    metaGroupID: NotRequired[int]
     description: NotRequired[LocalizedText]
     radius: NotRequired[float]
 

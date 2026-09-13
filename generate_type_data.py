@@ -146,6 +146,26 @@ def generate_brackets(types: Collection[int]) -> None:
     process_icons(icon_ids)
 
 
+def generate_type_metas(types: Collection[int]) -> None:
+    logger.debug("Generate type metas for %d types", len(types))
+
+    out = {}
+
+    for type_id in types:
+        type = sde.types_by_id[type_id]
+
+        if "metaGroupID" in type:
+            meta = type["metaGroupID"]
+
+            if meta in out:
+                out[meta].append(type_id)
+            else:
+                out[meta] = [type_id]
+
+    output_path = config.paths.type_output / "typeMetas.json"
+    write_if_changed(output_path, out)
+
+
 def generate_type_radii(collidable_types: Collection[int]) -> None:
     logger.debug("Generating radii data for %s collidable types", len(collidable_types))
     out = {}
@@ -213,6 +233,7 @@ def generate_type_data(collidable_types: Collection[int]) -> None:
     generate_type_tree(types)
     generate_group_names(groups)
     generate_brackets(types)
+    generate_type_metas(types)
     generate_type_radii(collidable_types)
     generate_npc_types(config.type_data.npc_groups)
 
