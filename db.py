@@ -109,5 +109,5 @@ def insert_types_batch(conn: connection, types: list[dict[str, Any]]) -> int:
 
 def fetch_types(conn: connection) -> set[int]:
     with get_cursor(conn) as cursor:
-        cursor.execute("SELECT type_id FROM mv_ship_search")
+        cursor.execute("SELECT DISTINCT victim_ship_type_id FROM kills")
         return {row[0] for row in cursor}
