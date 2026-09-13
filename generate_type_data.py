@@ -205,6 +205,8 @@ def generate_type_db(conn: connection) -> None:
 def generate_type_data(collidable_types: Collection[int]) -> None:
     with db.get_connection() as conn:
         generate_type_db(conn)
+
+        logger.info("Fetching ship types from the kills table")
         types = db.fetch_types(conn)
 
     if not types:
@@ -212,6 +214,8 @@ def generate_type_data(collidable_types: Collection[int]) -> None:
             "mv_ship_search returned no types; refusing to overwrite type data "
             "with empty files"
         )
+
+    logger.info("Fetched %d unique types from the kills table")
 
     retired_types = types - sde.types_by_id.keys()
     if retired_types:
