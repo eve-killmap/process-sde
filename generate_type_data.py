@@ -157,10 +157,15 @@ def generate_type_metas(types: Collection[int]) -> None:
         if "metaGroupID" in type:
             meta = type["metaGroupID"]
 
+            if meta == 1:
+                continue
+
             if meta in out:
                 out[meta].append(type_id)
             else:
                 out[meta] = [type_id]
+
+    out = {meta: sorted(arr) for meta, arr in out.items()}
 
     output_path = config.paths.type_output / "typeMetas.json"
     write_if_changed(output_path, out)
