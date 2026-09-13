@@ -184,10 +184,14 @@ def generate_type_db(conn: connection) -> None:
     logger.debug("Syncing type data to database")
     types = []
     for id, row in sde.types_by_id.items():
+        group_id = row["groupID"]
+        category_id = sde.groups_by_id[group_id]["categoryID"]
         type = {
             "id": id,
-            "group_id": row["groupID"],
+            "group_id": group_id,
+            "category_id": category_id,
             "faction_id": row.get("factionID"),
+            "meta_group_id": row.get("metaGroupID"),
             "name": row["name"]["en"],
             "description": row.get("description", {}).get("en"),
             "published": row["published"],
@@ -215,7 +219,7 @@ def generate_type_data(collidable_types: Collection[int]) -> None:
             "with empty files"
         )
 
-    logger.info("Fetched %d unique types from the kills table")
+    logger.info("Fetched %d unique types from the kills table", len(types))
 
     retired_types = types - sde.types_by_id.keys()
     if retired_types:

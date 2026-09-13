@@ -37,7 +37,9 @@ def init_schema(conn: connection) -> None:
         CREATE TABLE IF NOT EXISTS types (
             id INTEGER PRIMARY KEY,
             group_id INTEGER NOT NULL,
+            category_id INTEGER NOT NULL,
             faction_id INTEGER,
+            meta_group_id INTEGER,
             name VARCHAR(150) NOT NULL,
             description TEXT,
             published BOOL NOT NULL,
@@ -61,24 +63,30 @@ def insert_types_batch(conn: connection, types: list[dict[str, Any]]) -> int:
     logger.debug("Upserting batch of %d types", len(types))
 
     sql = """
-        INSERT INTO types (id, group_id, faction_id, name, description, published, last_updated)
+        INSERT INTO types (id, group_id, category_id, faction_id, meta_group_id, name, description, published, last_updated)
         VALUES %s
         ON CONFLICT (id) DO UPDATE SET
-            group_id    = EXCLUDED.group_id,
-            faction_id  = EXCLUDED.faction_id,
-            name        = EXCLUDED.name,
-            description = EXCLUDED.description,
-            published   = EXCLUDED.published,
-            last_updated = NOW()
+            group_id      = EXCLUDED.group_id,
+            category_id   = EXCLUDED.category_id,
+            faction_id    = EXCLUDED.faction_id,
+            meta_group_id = EXCLUDED.meta_group_id,
+            name          = EXCLUDED.name,
+            description   = EXCLUDED.description,
+            published     = EXCLUDED.published,
+            last_updated  = NOW()
         WHERE (
             types.group_id,
+            types.category_id,
             types.faction_id,
+            types.meta_group_id,
             types.name,
             types.description,
             types.published
         ) IS DISTINCT FROM (
             EXCLUDED.group_id,
+            EXCLUDED.category_id,
             EXCLUDED.faction_id,
+            EXCLUDED.meta_group_id,
             EXCLUDED.name,
             EXCLUDED.description,
             EXCLUDED.published
@@ -90,7 +98,9 @@ def insert_types_batch(conn: connection, types: list[dict[str, Any]]) -> int:
         (
             t["id"],
             t["group_id"],
+            t["category_id"],
             t["faction_id"],
+            t["meta_group_id"],
             t["name"],
             t["description"],
             t["published"],
@@ -100,7 +110,7 @@ def insert_types_batch(conn: connection, types: list[dict[str, Any]]) -> int:
 
     with get_cursor(conn) as cursor:
         rows = execute_values(
-            cursor, sql, values, template="(%s, %s, %s, %s, %s, %s, NOW())", fetch=True
+            cursor, sql, values, template="(%s, %s, %s, %s, %s, %s, %s, %s, NOW())", fetch=True
         )
 
     conn.commit()
