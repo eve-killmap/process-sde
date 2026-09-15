@@ -30,6 +30,9 @@ map:
     tutorials: 3.74e11
 
 type_data:
+  # Group IDs which correspond to dockable Upwell structures. Includes
+  # citadels, engineering complexes, and refineries.
+  dockable_upwell_groups: [1657, 1404, 1406]
   # Group IDs whose loss mails are coloured as NPC kills.
   npc_groups: [1764, 1765, 1766, 1767, 1803, 1813, 1814, 1876, 1924, 1878, 1879, 1880, 1896, 1909, 4917]
   # Fallback bracket icon ID used when a type has no specific bracket.

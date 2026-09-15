@@ -80,6 +80,7 @@ class MapConfig:
 
 @dataclass(frozen=True)
 class TypeDataConfig:
+    dockable_upwell_groups: list[int]
     npc_groups: list[int]
     default_icon: int
 
@@ -240,6 +241,10 @@ def load_config(
     )
 
     type_data_config = TypeDataConfig(
+        dockable_upwell_groups=_as_int_list(
+            type_cfg.get("dockable_upwell_groups", [1657, 1404, 1406]),
+            "type_data.dockable_upwell_groups",
+        ),
         npc_groups=_as_int_list(
             type_cfg.get(
                 "npc_groups",

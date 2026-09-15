@@ -78,6 +78,16 @@ def process_icons(icon_ids: Collection[int]) -> None:
     write_if_changed(output_path, out)
 
 
+def generate_dockable_upwell_structures(groups: Collection[int]) -> None:
+    logger.debug("Generating dockable upwell structures for %d groups", len(groups))
+
+    types = fetch_types(groups)
+    out = sorted(types)
+
+    output_path = config.paths.type_output / "dockableUpwell.json"
+    write_if_changed(output_path, out)
+
+
 def generate_brackets(types: Collection[int]) -> None:
     logger.debug("Generating bracket icons for %d types", len(types))
     icon_ids = []
@@ -231,6 +241,7 @@ def generate_type_data(collidable_types: Collection[int]) -> None:
     generate_type_names(types)
     generate_type_tree(types)
     generate_group_names(groups)
+    generate_dockable_upwell_structures(config.type_data.dockable_upwell_groups)
     generate_brackets(types)
     generate_type_metas(types)
     generate_type_radii(collidable_types)
