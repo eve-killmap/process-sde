@@ -1,0 +1,30 @@
+logging:
+  level: INFO
+  max_bytes: 10485760
+  backup_count: 5
+  # file: process-sde.log
+
+sde:
+  latest_url: https://developers.eveonline.com/static-data/tranquility/latest.jsonl
+  archive_url: https://developers.eveonline.com/static-data/tranquility/eve-online-static-data-{build_number}-jsonl.zip
+
+map:
+  position_round: 2
+  neighbor_map_size: 128
+  scale_factors:
+    au: 1.496e11
+    abyssal_deadspace: 5.236e11
+    tutorials: 3.74e11
+
+type_data:
+  dockable_upwell_groups: [1657, 1404, 1406]
+  npc_groups: [1764, 1765, 1766, 1767, 1803, 1813, 1814, 1876, 1924, 1878, 1879, 1880, 1896, 1909, 4917]
+  default_icon: 4533
+
+processing:
+  skip_system_ids: [19000001, 26000001, 36000001]
+
+output:
+  precompress: true
+  brotli_quality: 11
+  precompress_min_bytes: 1024

@@ -1,0 +1,392 @@
+import logging
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Any
+
+import sde
+from config import config
+from schema import Planet, SolarSystem, Vec2, Vec3
+from utils import (
+    Number,
+    get_distance,
+    get_large_object_warp_in,
+    get_planet_warp_in,
+    get_sun_warp_in,
+    round_num,
+    round_position,
+    scale_neighbors,
+    set_nested_if_present,
+    write_if_changed,
+    translate_wormhole_effect,
+)
+
+logger = logging.getLogger(__name__)
+
+# Zarzakh's station is referenced by no celestial, so it is attached explicitly
+_ZARZAKH_SYSTEM_ID = 30100000
+_ZARZAKH_STATION_ID = 60015187
+
+# Abyssal/tutorial systems have no celestial extent, use a fixed farthest object
+_UNBOUNDED_SYSTEM_TYPES = (2, 4)
+_UNBOUNDED_FARTHEST = 15000000000000
+
+
+@dataclass
+class BuiltSystem:
+    file_data: dict[str, Any]
+    map_data: dict[str, Any]
+    position_2d: Vec2 | None
+    system_type: int
+
+
+def get_system_type(system_id: int) -> int:
+    return int(str(system_id)[1])
+
+
+def get_faction_sov(system_row: SolarSystem) -> str | None:
+    if "factionID" in system_row:
+        return sde.factions_by_id[system_row["factionID"]]["name"]["en"]
+
+    constellation = sde.constellations_by_id[system_row["constellationID"]]
+    if "factionID" in constellation:
+        return sde.factions_by_id[constellation["factionID"]]["name"]["en"]
+
+    region = sde.regions_by_id[system_row["regionID"]]
+    if "factionID" in region:
+        return sde.factions_by_id[region["factionID"]]["name"]["en"]
+
+    return None
+
+
+class SystemBuilder:
+    def __init__(self) -> None:
+        self.farthest_object: float = 0.0
+        self.collidable_types: set[int] = set()
+
+    def set_farthest(self, position: Vec3) -> None:
+        distance = get_distance(position)
+        self.farthest_object = max(self.farthest_object, distance)
+
+    def set_star_data(self, dst: dict[str, Any], src: SolarSystem) -> None:
+        if "starID" not in src:
+            return
+
+        star = sde.stars_by_id[src["starID"]]
+        dst["star"] = {
+            "radius": round_num(star["radius"]),
+            "starID": src["starID"],
+            "warpPosition": get_sun_warp_in(star["radius"]),
+        }
+
+    def set_asteroid_belt_data(self, dst: dict[str, Any], src: Planet) -> None:
+        if "asteroidBeltIDs" not in src:
+            return
+
+        belts = []
+
+        for belt_id in src["asteroidBeltIDs"]:
+            belt = sde.belts_by_id[belt_id]
+
+            belt_obj = {
+                "asteroidBeltID": belt_id,
+                "position": round_position(belt["position"]),
+                "orbitIndex": belt["orbitIndex"],
+            }
+
+            set_nested_if_present(belt_obj, belt, "uniqueName", "en")
+
+            if "radius" in belt:
+                belt_obj["radius"] = round_num(belt["radius"])
+                if belt_obj["radius"] >= 90000:
+                    belt_obj["warpPosition"] = get_large_object_warp_in(
+                        belt["position"], belt["radius"]
+                    )
+
+            belts.append(belt_obj)
+
+            self.set_farthest(belt["position"])
+
+        dst["asteroidBelts"] = belts
+
+    def set_station_data(self, dst: dict[str, Any], src: Mapping[str, Any]) -> None:
+        if "npcStationIDs" not in src:
+            return
+
+        stations = []
+
+        for station_id in src["npcStationIDs"]:
+            station = sde.stations_by_id[station_id]
+
+            name = sde.npc_corporations_by_id[station["ownerID"]]["name"]["en"]
+            if station["useOperationName"]:
+                name += (
+                    " "
+                    + sde.station_operations_by_id[station["operationID"]][
+                        "operationName"
+                    ]["en"]
+                )
+
+            stations.append(
+                {
+                    "stationID": station_id,
+                    "position": round_position(station["position"]),
+                    "name": name,
+                    "typeID": station["typeID"],
+                }
+            )
+
+            self.set_farthest(station["position"])
+
+            self.collidable_types.add(station["typeID"])
+
+        dst["stations"] = stations
+
+    def set_moon_data(self, dst: dict[str, Any], src: Planet) -> None:
+        if "moonIDs" not in src:
+            return
+
+        moons = []
+
+        for moon_id in src["moonIDs"]:
+            moon = sde.moons_by_id[moon_id]
+
+            moon_obj = {
+                "moonID": moon_id,
+                "position": round_position(moon["position"]),
+                "radius": round_num(moon["radius"]),
+                "warpPosition": get_large_object_warp_in(
+                    moon["position"], moon["radius"]
+                ),
+                "orbitIndex": moon["orbitIndex"],
+            }
+
+            if str(moon_id) in sde.mining_beacons:
+                mining_beacon = sde.mining_beacons[str(moon_id)]
+                moon_obj["miningBeacon"] = {
+                    "x": round_num(mining_beacon["position"]["x"]),
+                    "y": round_num(mining_beacon["position"]["y"]),
+                    "z": round_num(mining_beacon["position"]["z"]),
+                }
+
+            set_nested_if_present(moon_obj, moon, "uniqueName", "en")
+
+            self.set_station_data(moon_obj, moon)
+
+            moons.append(moon_obj)
+
+            self.set_farthest(moon["position"])
+
+        dst["moons"] = moons
+
+    def set_planet_data(self, dst: dict[str, Any], src: SolarSystem) -> None:
+        if "planetIDs" not in src:
+            return
+
+        planets = []
+
+        for planet_id in src["planetIDs"]:
+            planet = sde.planets_by_id[planet_id]
+
+            planet_obj = {
+                "planetID": planet_id,
+                "position": round_position(planet["position"]),
+                "radius": round_num(planet["radius"]),
+                "warpPosition": get_planet_warp_in(
+                    planet_id, planet["position"], planet["radius"]
+                ),
+                "celestialIndex": planet["celestialIndex"],
+            }
+
+            set_nested_if_present(planet_obj, planet, "uniqueName", "en")
+
+            self.set_asteroid_belt_data(planet_obj, planet)
+            self.set_moon_data(planet_obj, planet)
+            self.set_station_data(planet_obj, planet)
+
+            planets.append(planet_obj)
+
+            self.set_farthest(planet["position"])
+
+        dst["planets"] = planets
+
+    def set_stargate_data(self, dst: dict[str, Any], src: SolarSystem) -> None:
+        if "stargateIDs" not in src:
+            return
+
+        stargates = []
+        neighbors = {}
+
+        for stargate_id in src["stargateIDs"]:
+            stargate = sde.stargates_by_id[stargate_id]
+            dest = sde.solar_systems[stargate["destination"]["solarSystemID"]]
+
+            gate_type = 1
+            if src["constellationID"] != dest["constellationID"]:
+                gate_type = 2
+            if src["regionID"] != dest["regionID"]:
+                gate_type = 3
+
+            stargates.append(
+                {
+                    "stargateID": stargate_id,
+                    "position": round_position(stargate["position"]),
+                    "destName": dest["name"]["en"],
+                    "jumpType": gate_type,
+                    "typeID": stargate["typeID"],
+                }
+            )
+
+            # Stargates exist only in k-space, which always has a position2D
+            neighbor_pos = dest.get("position2D")
+            assert neighbor_pos is not None
+            neighbors[stargate_id] = (
+                float(neighbor_pos["x"]),
+                float(neighbor_pos["y"]),
+            )
+
+            self.set_farthest(stargate["position"])
+
+            self.collidable_types.add(stargate["typeID"])
+
+        system_pos_2d = src.get("position2D")
+        assert system_pos_2d is not None
+        system_position = (float(system_pos_2d["x"]), float(system_pos_2d["y"]))
+        transformed = scale_neighbors(system_position, neighbors)
+
+        for item in stargates:
+            x, y = transformed[item["stargateID"]]
+            item["position2D"] = {"x": x, "y": y}
+
+        dst["stargates"] = stargates
+
+        system_id = str(src["_key"])
+        if system_id in sde.disrupted_stargates:
+            disrupted = []
+
+            for stargate_id, stargate in sde.disrupted_stargates[system_id].items():
+                dest_name = sde.solar_systems[stargate["destination"]]["name"]["en"]
+
+                disrupted.append(
+                    {
+                        "stargateID": int(stargate_id),
+                        "destination": stargate["destination"],
+                        "position": round_position(stargate["position"]),
+                        "destName": dest_name,
+                        "typeID": stargate["typeID"],
+                    }
+                )
+
+                self.set_farthest(stargate["position"])
+
+                self.collidable_types.add(stargate["typeID"])
+
+            dst["disruptedStargates"] = disrupted
+
+    def set_wormhole_data(self, dst: dict[str, Any], src: SolarSystem) -> None:
+        solar_system_id = src["_key"]
+
+        wormhole_class_id = None
+        if "wormholeClassID" in src:
+            wormhole_class_id = src["wormholeClassID"]
+        else:
+            constellation = sde.constellations_by_id[src["constellationID"]]
+            if "wormholeClassID" in constellation:
+                wormhole_class_id = constellation["wormholeClassID"]
+            else:
+                region = sde.regions_by_id[src["regionID"]]
+                if "wormholeClassID" in region:
+                    wormhole_class_id = region["wormholeClassID"]
+
+        if wormhole_class_id is not None:
+            dst["wormholeClassID"] = wormhole_class_id
+        else:
+            logger.warning(
+                "Unable to ascertain wormhole class ID for system %d", solar_system_id
+            )
+
+        if solar_system_id in sde.secondary_suns:
+            secondary_sun = sde.secondary_suns[solar_system_id]
+            effect = translate_wormhole_effect(secondary_sun["typeID"])
+            if effect is not None:
+                dst["wormholeEffect"] = effect
+            else:
+                logger.warning(
+                    "Unable to decode wormhole effect for system %d", solar_system_id
+                )
+
+    def save_system(self, system_id: int, data: dict[str, Any]) -> None:
+        out_path = config.paths.system_output / f"{system_id}.json"
+        write_if_changed(out_path, data)
+
+    def _build_map_data(self, row: SolarSystem) -> dict[str, Any]:
+        return {
+            "solarSystemID": row["_key"],
+            "name": row["name"]["en"],
+            "position": round_position(row["position"]),
+            "constellationID": row["constellationID"],
+            "regionID": row["regionID"],
+            "stargateDestinations": [
+                sde.stargates_by_id[stargate_id]["destination"]["solarSystemID"]
+                for stargate_id in row.get("stargateIDs", [])
+            ],
+            "securityStatus": row["securityStatus"],
+        }
+
+    def _append_wormhole_map_data(
+        self, map_data: dict[str, Any], file_data: dict[str, Any]
+    ) -> None:
+        if file_data.get("wormholeClassID"):
+            map_data["wormholeClassID"] = file_data["wormholeClassID"]
+        if file_data.get("wormholeEffect"):
+            map_data["wormholeEffect"] = file_data["wormholeEffect"]
+
+    def build(self, row: SolarSystem) -> BuiltSystem:
+        self.farthest_object = 0.0
+        system_id = row["_key"]
+        system_name = row["name"]["en"]
+        logger.debug("Generating system file for %s (%d)", system_name, system_id)
+
+        system_type = get_system_type(system_id)
+
+        data = {
+            "solarSystemID": system_id,
+            "constellationName": sde.constellations_by_id[row["constellationID"]][
+                "name"
+            ]["en"],
+            "name": system_name,
+            "radius": round_num(row["radius"]),
+            "regionName": sde.regions_by_id[row["regionID"]]["name"]["en"],
+            "securityStatus": row["securityStatus"],
+        }
+
+        if system_id == _ZARZAKH_SYSTEM_ID:
+            self.set_station_data(data, {"npcStationIDs": [_ZARZAKH_STATION_ID]})
+
+        faction_name = get_faction_sov(row)
+        if faction_name is not None:
+            data["sovFactionName"] = faction_name
+
+        if system_type == 1:
+            self.set_wormhole_data(data, row)
+
+        self.set_star_data(data, row)
+        self.set_planet_data(data, row)
+        self.set_stargate_data(data, row)
+
+        if system_type in _UNBOUNDED_SYSTEM_TYPES:
+            self.farthest_object = _UNBOUNDED_FARTHEST
+
+        data["farthestObject"] = round_num(self.farthest_object)
+
+        self.save_system(system_id, data)
+
+        map_data = self._build_map_data(row)
+        if system_type == 1:
+            self._append_wormhole_map_data(map_data, data)
+
+        return BuiltSystem(
+            file_data=data,
+            map_data=map_data,
+            position_2d=row.get("position2D"),
+            system_type=system_type,
+        )
